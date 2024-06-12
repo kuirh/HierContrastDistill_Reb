@@ -39,21 +39,22 @@ sweep_configuration = {
     "metric": {"goal": "minimize", "name": "val_loss"},
     "parameters": {
         # Data parameters
-        "batch_size": {"values": [32]},
+        "batch_size": {"values": [30,32,35]},
         # Training parameters
         "optimizer": {"values": ["adam"]},
         "learning_rate": {"values": [0.01]},
-        "teacher_epochs": {"values": [3500]},
-        "student_epochs": {"values": [3500]},
+        "teacher_epochs": {"values": [2500]},
+        "student_epochs": {"values": [2500]},
         "loss": {"values": ["huber"]},
 
 
         # Additional parameters
-        "use_cbam": {"values": [False]},
+        "use_cbam": {"values": [True]},
+
         "use_gating": {"values": [True]},  # Correct parameter based on function need
 
-        "sigma": {"values": [0.5]},
-        "temperature": {"values": [0.1]}
+        "decay": {"values": [0.99]},
+        "sigma": {"values": [0.5]}
     },
 }
 
@@ -73,17 +74,18 @@ def build_params_dict(config):
         }
     }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project="Kimore")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project="UIPRMD_ex_newmuti")
+
+#sweep_id = wandb.sweep(sweep=sweep_configuration, project="kimore-5")
 
 
 
 
 
 def train(config=None):
-    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     print(device)
-    #seed = random.randint(0, 655350)
-    seed=257439
+    seed = random.randint(0, 655350)
     set_random_seed(seed)
 
     os.makedirs(str(seed), exist_ok=True)
@@ -92,7 +94,7 @@ def train(config=None):
     #wandb.init(mode="offline")
     #with wandb.init(config=config):
 
-    with wandb.init(dir=str(seed), name='ex5'):
+    with wandb.init(dir=str(seed), name='ex1_10_32_0.1'):
 
 
         # If called by wandb.agent, as below,
@@ -102,24 +104,36 @@ def train(config=None):
         best_val_loss = float('inf')  # 设置一个很高的初始值
 
         no_improvement = 0  # Counter for early stopping
-        patience = 4000  # Set the patience value in epochs
+        patience = 6000  # Set the patience value in epochs
+        alpha = 0.9
+        train_loader, val_loader,test_loder,dataloder = build_dataset(device,'../UI_prmd/UI-PRMD/UI_PRMD_ex1', batch_size=config.batch_size)
 
-        train_loader, val_loader,test_loder,dataloder = build_dataset(device,'../DataProcess/Dataset_cTS/ex1', batch_size=config.batch_size)
+        network = build_network(device,3,params_dict['MutiScaleModel_parameters'])
 
-        network = build_network(device,7,params_dict['MutiScaleModel_parameters'])
+
 
         optimizer = build_optimizer(network, 'adam', learning_rate=config.learning_rate)
 
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10*1000, 35*1000], gamma=0.1)
+        #milestones = [100*320, 300*320]  # Epochs after which the learning rate will decay
+        #gamma = 0.1  # Decay rate
+        #scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=gamma)
+
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10*1000, 32*1000], gamma=0.1)
+
+
+        #scheduler =torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=3000, T_mult=2,eta_min=config.learning_rate*0.01)
+
+        #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=15000, gamma=0.15)
+
 
 
         for epoch in range(config.teacher_epochs):
-            lr = scheduler.get_last_lr()[0]
-            train_l1loss, train_pred, train_truth=train_epoch(network, train_loader, optimizer,config.loss,device,epoch,config.sigma,config.temperature,scheduler)   # 训练一个epoch)
+            alpha = scheduler.get_last_lr()[0]/config.learning_rate
+            train_l1loss, train_pred, train_truth=train_epoch(network, train_loader, optimizer,config.loss,device,alpha,config.sigma,scheduler)   # 训练一个epoch)
 
             val_loss, val_correlation, val_truth, val_pred = val_epoch(network, val_loader, dataloder, device)
 
-            wandb.log({"train_L1Loss": train_l1loss*50, "val_loss": val_loss, "val_correlation": val_correlation[0], "epoch": epoch, "step": scheduler.last_epoch, "lr": lr})
+            wandb.log({"train_L1Loss": train_l1loss*50, "val_loss": val_loss, "val_correlation": val_correlation[0], "epoch": epoch, "step": scheduler.last_epoch})
 
 
             if val_loss < best_val_loss:
@@ -150,9 +164,6 @@ def train(config=None):
         wandb.log({"test_loss": test_loss, "test_correlation": test_correlation[0], "test_rmse": test_rmse, "test_mape": test_mape})
 
 
+# Start sweep job.
 
-
-
-
-
-wandb.agent(sweep_id, train, count=20)
+wandb.agent(sweep_id, train, count=1)

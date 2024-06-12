@@ -28,6 +28,7 @@ class MultimodalDataset(Dataset):
         # 读取.npy文件
         DepthVideo = np.load(os.path.join(folder_path, 'DepthVideo.npy'), allow_pickle=True)
         DepthVideo=np.expand_dims(DepthVideo, axis=0)
+        #DepthVideo= DepthVideo.view(1, 1024, 424, 512)  # 现在形状应该是 (16, 1024, 424, 512)
         JointPosition = np.load(os.path.join(folder_path, 'pndarry.npy'), allow_pickle=True)
         JointOrientation = np.load(os.path.join(folder_path, 'oriarry.npy'), allow_pickle=True)
 

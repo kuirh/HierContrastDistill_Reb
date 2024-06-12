@@ -35,7 +35,7 @@ def get_bacth_distil_lloss(Xteacher, Yteacher, Xstudnet,sigma,temperature,distil
 
 
 
-    return total_loss.mean()*0.1
+    return total_loss.mean()*0.001
 
 def train_epoch(network, loader, optimizer,lossfn,device,ep,sigma,temperature,scheduler):
     train_truth=[]
